@@ -215,9 +215,26 @@ log_entry() {
   fi
 }
 
-notify() { # $1 title, $2 body; always logged as well
+# Routine requesters get a short popup; anything unrecognised stays on screen,
+# because that is the case worth interrupting for.
+urgency_for() {                   # $1 = program name
+  case "$1" in
+    sudo|doas|su|login|sshd|ssh|ssh-agent|ssh-add) echo normal ;;
+    gdm*|sddm|lightdm|polkit*|systemd-ask*)        echo normal ;;
+    chrome|chromium|brave|vivaldi|opera|msedge)    echo normal ;;
+    firefox|firefox-bin)                           echo normal ;;
+    *)                                             echo critical ;;
+  esac
+}
+
+notify() { # $1 title, $2 body, $3 urgency (normal|critical)
   if [ "$NOTIFY" = 1 ] && command -v notify-send >/dev/null 2>&1; then
-    local uid= bus=
+    local uid= bus= urg=${3:-normal} opts
+    if [ "$urg" = critical ]; then
+      opts=(-u critical)          # no -t: stays until dismissed
+    else
+      opts=(-u normal -t 6000)    # milliseconds
+    fi
     if [ -n "$TARGET_USER" ]; then
       uid=$(id -u "$TARGET_USER" 2>/dev/null) || uid=
       bus=/run/user/${uid:-0}/bus
@@ -226,10 +243,10 @@ notify() { # $1 title, $2 body; always logged as well
     if [ -n "$uid" ] && [ -S "$bus" ]; then
       as_user_cmd "$TARGET_USER" env -u LD_LIBRARY_PATH -u LD_PRELOAD \
         DBUS_SESSION_BUS_ADDRESS="unix:path=$bus" XDG_RUNTIME_DIR="/run/user/$uid" \
-        notify-send -u critical -a FIDO2 "$1" "$2" >/dev/null 2>&1 || true
+        notify-send "${opts[@]}" -a FIDO2 "$1" "$2" >/dev/null 2>&1 || true
     elif [ -z "$TARGET_USER" ]; then
       env -u LD_LIBRARY_PATH -u LD_PRELOAD \
-        notify-send -u critical -a FIDO2 "$1" "$2" >/dev/null 2>&1 || true
+        notify-send "${opts[@]}" -a FIDO2 "$1" "$2" >/dev/null 2>&1 || true
     fi
   fi
   log_entry "$1: $2"
@@ -314,7 +331,10 @@ stdbuf -oL bpftrace -q -e "$prog" | {
               "$(date '+%F %T')" "$comm" "$pid" "$exe" "$target")
 
     printf '%s\n' "$line"
-    notify "Security key request" "$comm (pid $pid)"$'\n'"$exe"$'\n'"$target"
+    prog=${exe##*/}
+    [ "$prog" = '?' ] && prog=$comm
+    notify "Security key request" "$comm (pid $pid)"$'\n'"$exe"$'\n'"$target" \
+           "$(urgency_for "$prog")"
   done
 }
 

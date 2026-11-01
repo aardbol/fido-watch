@@ -43,6 +43,8 @@ Then use the key normally: run `sudo`, log in somewhere, use a passkey. Leave it
 | `ssh`, `ssh-agent` | an `sk-ssh-*` key operation |
 | anything else | **investigate** what and why |
 
+Known requesters (`sudo`, login managers, polkit, browsers, `ssh`) get a brief popup that clears itself after six seconds. Anything not on that list uses critical urgency, so the notification stays on screen until you dismiss it. The list lives in `urgency_for()`; add to it as you meet programs that should not be sticky.
+
 ## Options
 
 | Flag | Effect |
